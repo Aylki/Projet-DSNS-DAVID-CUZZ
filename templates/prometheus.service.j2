@@ -15,6 +15,7 @@ ExecStart=/usr/local/bin/prometheus \
   --storage.tsdb.retention.time=30d \
   --web.listen-address=0.0.0.0:9090 \
   --web.enable-lifecycle
+  --web.enable-remote-write-receiver
 
 [Install]
 WantedBy=multi-user.target
