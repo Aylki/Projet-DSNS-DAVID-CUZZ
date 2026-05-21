@@ -1,0 +1,171 @@
+---
+# ansible/roles/dmz-mail/tasks/main.yml
+# DMZ-MAIL : Debian 12 + Docker + Mailcow
+# Fournit : SMTP, IMAP, Webmail (Roundcube inclus dans Mailcow), anti-spam
+
+- name: "MAIL | Installation des paquets de base"
+  ansible.builtin.apt:
+    name:
+      - curl
+      - git
+      - ca-certificates
+      - gnupg
+      - lsb-release
+      - python3-pip
+      - ufw
+    state: present
+    update_cache: true
+
+# ---- CA interne ----
+- name: "MAIL | Copie du certificat CA interne"
+  ansible.builtin.copy:
+    content: "{{ pki_ca_cert_content }}"
+    dest: "{{ pki_ca_cert_path }}"
+    mode: "0644"
+  notify: update-ca-certificates
+
+# ---- Docker ----
+- name: "MAIL | Ajout de la clé GPG Docker"
+  ansible.builtin.shell: |
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/debian/gpg \
+      | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    chmod a+r /etc/apt/keyrings/docker.gpg
+  args:
+    creates: /etc/apt/keyrings/docker.gpg
+
+- name: "MAIL | Ajout du dépôt Docker"
+  ansible.builtin.apt_repository:
+    repo: >
+      deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg]
+      https://download.docker.com/linux/debian
+      {{ ansible_distribution_release }} stable
+    state: present
+    filename: docker
+
+- name: "MAIL | Installation de Docker Engine"
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+    update_cache: true
+
+- name: "MAIL | Démarrage et activation du service Docker"
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+    enabled: true
+
+# ---- Mailcow ----
+- name: "MAIL | Création du répertoire Mailcow"
+  ansible.builtin.file:
+    path: /opt/mailcow-dockerized
+    state: directory
+    mode: "0755"
+
+- name: "MAIL | Clonage de Mailcow (branche master)"
+  ansible.builtin.git:
+    repo: "https://github.com/mailcow/mailcow-dockerized.git"
+    dest: /opt/mailcow-dockerized
+    version: master
+    force: false
+  register: mailcow_clone
+
+- name: "MAIL | Génération de la configuration Mailcow"
+  ansible.builtin.shell: |
+    cd /opt/mailcow-dockerized
+    MAILCOW_HOSTNAME=mail.itway.fr \
+    MAILCOW_TZ=Europe/Paris \
+    ./generate_config.sh
+  args:
+    creates: /opt/mailcow-dockerized/mailcow.conf
+  environment:
+    MAILCOW_HOSTNAME: "mail.{{ domain_external }}"
+    MAILCOW_TZ: "Europe/Paris"
+
+# Surcharge de la configuration avec nos paramètres
+- name: "MAIL | Configuration mailcow.conf"
+  ansible.builtin.template:
+    src: mailcow.conf.j2
+    dest: /opt/mailcow-dockerized/mailcow.conf
+    mode: "0640"
+  notify: restart-mailcow
+
+# Certificats TLS signés par la CA interne
+- name: "MAIL | Création du répertoire des certificats Mailcow"
+  ansible.builtin.file:
+    path: /opt/mailcow-dockerized/data/assets/ssl
+    state: directory
+    mode: "0755"
+
+- name: "MAIL | Copie du certificat TLS (signé CA interne)"
+  ansible.builtin.copy:
+    src: "files/mail.itway.fr.crt"
+    dest: /opt/mailcow-dockerized/data/assets/ssl/cert.pem
+    mode: "0644"
+  notify: restart-mailcow
+
+- name: "MAIL | Copie de la clé TLS"
+  ansible.builtin.copy:
+    src: "files/mail.itway.fr.key"
+    dest: /opt/mailcow-dockerized/data/assets/ssl/key.pem
+    mode: "0600"
+  notify: restart-mailcow
+
+# LDAP / AD integration via Mailcow SOGo
+- name: "MAIL | Configuration LDAP (intégration AD)"
+  ansible.builtin.template:
+    src: ldap.conf.j2
+    dest: /opt/mailcow-dockerized/data/conf/dovecot/ldap/passdb.conf
+    mode: "0640"
+  notify: restart-mailcow
+
+# Override docker-compose pour limiter l'exposition
+- name: "MAIL | Override docker-compose (ports et volumes)"
+  ansible.builtin.template:
+    src: docker-compose.override.yml.j2
+    dest: /opt/mailcow-dockerized/docker-compose.override.yml
+    mode: "0644"
+  notify: restart-mailcow
+
+- name: "MAIL | Démarrage de Mailcow"
+  ansible.builtin.shell: |
+    cd /opt/mailcow-dockerized
+    docker compose pull --quiet
+    docker compose up -d
+  args:
+    chdir: /opt/mailcow-dockerized
+  when: mailcow_clone.changed or ansible_run_tags | intersect(['mailcow', 'restart'])
+
+# ---- Pare-feu UFW ----
+- name: "MAIL | Configuration UFW - règles entrantes"
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+    comment: "{{ item.comment }}"
+  loop:
+    - { port: "25",  proto: "tcp", comment: "SMTP" }
+    - { port: "465", proto: "tcp", comment: "SMTPS" }
+    - { port: "587", proto: "tcp", comment: "SMTP Submission" }
+    - { port: "993", proto: "tcp", comment: "IMAPS" }
+    - { port: "443", proto: "tcp", comment: "HTTPS Webmail" }
+    - { port: "80",  proto: "tcp", comment: "HTTP -> redirect HTTPS" }
+
+- name: "MAIL | Accès administration uniquement depuis IT-NET"
+  community.general.ufw:
+    rule: allow
+    src: "10.0.3.0/28"
+    port: "8080"
+    proto: tcp
+    comment: "Mailcow admin UI depuis IT-NET uniquement"
+
+- name: "MAIL | Activation UFW"
+  community.general.ufw:
+    state: enabled
+    policy: deny
+    direction: incoming

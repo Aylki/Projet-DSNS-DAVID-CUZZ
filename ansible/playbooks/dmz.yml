@@ -1,0 +1,33 @@
+---
+# ansible/playbooks/dmz.yml
+# Playbook principal pour déployer l'ensemble de la DMZ
+# Exécuter depuis IT-ANSIBLE (10.0.3.2) :
+#   ansible-playbook -i inventory/hosts playbooks/dmz.yml --ask-vault-pass
+
+- name: "Déploiement DMZ-DNS"
+  hosts: dmz-dns
+  become: true
+  roles:
+    - role: dmz-dns
+  tags: [dns, dmz]
+
+- name: "Déploiement DMZ-MAIL"
+  hosts: dmz-mail
+  become: true
+  roles:
+    - role: dmz-mail
+  tags: [mail, dmz]
+
+- name: "Déploiement DMZ-WEB"
+  hosts: dmz-web
+  become: true
+  roles:
+    - role: dmz-web
+  tags: [web, dmz]
+
+- name: "Déploiement DMZ-RPROXY"
+  hosts: dmz-rproxy
+  become: true
+  roles:
+    - role: dmz-rproxy
+  tags: [rproxy, dmz]

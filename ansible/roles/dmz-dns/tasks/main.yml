@@ -1,0 +1,94 @@
+---
+# ansible/roles/dmz-dns/tasks/main.yml
+# DMZ-DNS : BIND9
+# Zones servies : itway.fr (publique) + int.itway.fr (interne DMZ seulement)
+# IMPORTANT : aucune communication avec le DNS interne (itway.local)
+
+- name: "DNS | Installation BIND9"
+  ansible.builtin.apt:
+    name:
+      - bind9
+      - bind9utils
+      - bind9-doc
+      - dnsutils
+      - ufw
+    state: present
+    update_cache: true
+
+# ---- Configuration principale ----
+- name: "DNS | named.conf.options"
+  ansible.builtin.template:
+    src: named.conf.options.j2
+    dest: /etc/bind/named.conf.options
+    owner: root
+    group: bind
+    mode: "0644"
+    validate: "named-checkconf %s"
+  notify: restart-bind9
+
+- name: "DNS | named.conf.local (déclaration des zones)"
+  ansible.builtin.template:
+    src: named.conf.local.j2
+    dest: /etc/bind/named.conf.local
+    owner: root
+    group: bind
+    mode: "0644"
+    validate: "named-checkconf %s"
+  notify: restart-bind9
+
+# ---- Zones ----
+- name: "DNS | Zone itway.fr (publique)"
+  ansible.builtin.template:
+    src: db.itway.fr.j2
+    dest: /etc/bind/db.itway.fr
+    owner: root
+    group: bind
+    mode: "0644"
+  notify: reload-bind9
+
+- name: "DNS | Zone int.itway.fr (DMZ interne uniquement)"
+  ansible.builtin.template:
+    src: db.int.itway.fr.j2
+    dest: /etc/bind/db.int.itway.fr
+    owner: root
+    group: bind
+    mode: "0644"
+  notify: reload-bind9
+
+- name: "DNS | Zone inverse DMZ (PTR)"
+  ansible.builtin.template:
+    src: db.reverse.dmz.j2
+    dest: /etc/bind/db.10.0.5
+    owner: root
+    group: bind
+    mode: "0644"
+  notify: reload-bind9
+
+- name: "DNS | Vérification des zones"
+  ansible.builtin.command: "named-checkzone {{ item.zone }} {{ item.file }}"
+  loop:
+    - { zone: "itway.fr",     file: "/etc/bind/db.itway.fr" }
+    - { zone: "int.itway.fr", file: "/etc/bind/db.int.itway.fr" }
+  changed_when: false
+
+- name: "DNS | Démarrage et activation BIND9"
+  ansible.builtin.systemd:
+    name: named
+    state: started
+    enabled: true
+
+# ---- Pare-feu ----
+- name: "DNS | UFW - autoriser DNS depuis Internet et DMZ"
+  community.general.ufw:
+    rule: allow
+    port: "53"
+    proto: "{{ item }}"
+  loop:
+    - tcp
+    - udp
+
+- name: "DNS | UFW - activation"
+  community.general.ufw:
+    state: enabled
+    policy: deny
+    direction: incoming

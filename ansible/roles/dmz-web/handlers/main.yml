@@ -1,0 +1,8 @@
+---
+- name: reload-nginx
+  ansible.builtin.systemd:
+    name: nginx
+    state: reloaded
+
+- name: update-ca-certificates
+  ansible.builtin.command: update-ca-certificates

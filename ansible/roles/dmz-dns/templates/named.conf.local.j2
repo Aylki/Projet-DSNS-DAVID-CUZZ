@@ -1,0 +1,36 @@
+// named.conf.local - DNS-DMZ (10.0.5.5)
+// Généré par Ansible
+
+acl "trusted_internal" {
+    10.0.5.0/28;
+    10.0.4.0/27;
+    10.0.3.0/28;
+    192.168.15.0/24;
+    10.0.10.0/30;
+    127.0.0.1;
+    ::1;
+};
+
+// Zone publique itway.fr - accessible depuis Internet
+zone "{{ domain_external }}" {
+    type master;
+    file "/etc/bind/db.{{ domain_external }}";
+    allow-query    { any; };
+    allow-transfer { none; };
+};
+
+// Zone interne DMZ : int.itway.fr - NON accessible depuis Internet
+zone "int.{{ domain_external }}" {
+    type master;
+    file "/etc/bind/db.int.{{ domain_external }}";
+    allow-query    { trusted_internal; };
+    allow-transfer { none; };
+};
+
+// Zone inverse DMZ 10.0.5.0/28
+zone "5.0.10.in-addr.arpa" {
+    type master;
+    file "/etc/bind/db.10.0.5";
+    allow-query    { trusted_internal; };
+    allow-transfer { none; };
+};

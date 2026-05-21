@@ -1,0 +1,29 @@
+# ansible/inventory/hosts
+# ITWay SAS - Inventaire Ansible
+# Exécuté depuis ANSIBLE-IT : 10.0.3.2
+
+[dmz]
+proxy-dmz  ansible_host=10.0.5.2
+web-dmz    ansible_host=10.0.5.3
+mail-dmz   ansible_host=10.0.5.4
+dns-dmz    ansible_host=10.0.5.5
+
+[dmz:vars]
+ansible_user=ansible
+ansible_ssh_private_key_file=~/.ssh/ansible_ed25519
+ansible_python_interpreter=/usr/bin/python3
+
+[srv]
+intranet-srv ansible_host=10.0.4.5
+sso-srv      ansible_host=10.0.4.4
+pki-srv      ansible_host=10.0.4.3
+ad-srv       ansible_host=10.0.4.2
+
+[it]
+ansible-it  ansible_host=10.0.3.2
+graphana-it ansible_host=10.0.3.3
+mgmt-it     ansible_host=10.0.3.4
+
+[all:vars]
+domain_internal=itway.local
+domain_external=itway.fr

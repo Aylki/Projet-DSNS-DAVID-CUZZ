@@ -1,0 +1,24 @@
+; Zone int.itway.fr - INTERNE DMZ uniquement
+; NON résolvable depuis Internet
+; Généré par Ansible - DNS-DMZ 10.0.5.5
+
+$TTL 3600
+@   IN  SOA dns.{{ domain_external }}. admin.{{ domain_external }}. (
+            2026021601
+            3600
+            1800
+            604800
+            300 )
+
+@   IN  NS  dns.{{ domain_external }}.
+
+; --- Machines DMZ (IPs internes) ---
+proxy-dmz       IN  A   {{ dmz_rproxy_ip }}   ; 10.0.5.2
+web-dmz         IN  A   {{ dmz_web_ip }}       ; 10.0.5.3
+mail-dmz        IN  A   {{ dmz_mail_ip }}      ; 10.0.5.4
+dns-dmz         IN  A   {{ dmz_dns_ip }}       ; 10.0.5.5
+rt-dmz          IN  A   {{ dmz_rt_ip }}        ; 10.0.5.1
+
+; Alias FQDN complets (requis par le cahier des charges)
+dmz-web.int.{{ domain_external }}.   IN  A   {{ dmz_web_ip }}
+dmz-rt.int.{{ domain_external }}.    IN  A   {{ dmz_rt_ip }}

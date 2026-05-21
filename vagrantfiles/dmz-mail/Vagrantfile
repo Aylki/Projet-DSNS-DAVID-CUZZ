@@ -1,0 +1,41 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+# MAIL-DMZ - mail.itway.fr
+# IP : 10.0.5.4 | DMZ-VLAN 10.0.5.0/28 | Gateway : 10.0.5.1 (RT-DMZ)
+# Debian 12 + Docker + Mailcow
+
+Vagrant.configure("2") do |config|
+  config.vm.box      = "debian/bookworm64"
+  config.vm.hostname = "mail-dmz"
+
+  # Réseau DMZ
+  config.vm.network "private_network",
+    ip: "10.0.5.4",
+    virtualbox__intnet: "dmz-vlan"
+
+  config.vm.provider "virtualbox" do |vb|
+    vb.name   = "MAIL-DMZ"
+    vb.memory = 4096   # Mailcow : 4 Go minimum (Rspamd + ClamAV + MariaDB)
+    vb.cpus   = 2
+    vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
+  end
+
+  # Dossier de config Mailcow partagé (certificats, surcharges)
+  config.vm.synced_folder "./mailcow-config", "/tmp/mailcow-config",
+    create: true, type: "virtualbox"
+
+  # Bootstrap minimal (Ansible fera le reste depuis ANSIBLE-IT 10.0.3.2)
+  config.vm.provision "shell", inline: <<-SHELL
+    apt-get update -qq
+    apt-get install -y -qq python3 python3-pip
+    # Créer l'utilisateur ansible avec accès sudo sans mot de passe
+    useradd -m -s /bin/bash ansible 2>/dev/null || true
+    echo "ansible ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/ansible
+    mkdir -p /home/ansible/.ssh
+    # Copier la clé publique d'ANSIBLE-IT ici en prod :
+    echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBhuPxfoR/HA7wfp3pXCN6Bxh+WYz/3W2CJVDkRIw463 ansible_admin@debian" >> /home/ansible/.ssh/authorized_keys
+    chmod 700 /home/ansible/.ssh
+    chown -R ansible:ansible /home/ansible/.ssh
+    echo "MAIL-DMZ (10.0.5.4) prête pour Ansible depuis 10.0.3.2"
+  SHELL
+end

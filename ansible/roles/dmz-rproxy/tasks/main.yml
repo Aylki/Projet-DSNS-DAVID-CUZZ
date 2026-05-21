@@ -1,0 +1,119 @@
+---
+# ansible/roles/dmz-rproxy/tasks/main.yml
+# DMZ-RPROXY : NGINX Reverse Proxy
+# Expose : itway.fr, webmail.itway.fr, sso.itway.fr
+
+- name: "RPROXY | Installation NGINX et outils"
+  ansible.builtin.apt:
+    name:
+      - nginx
+      - ca-certificates
+      - openssl
+      - ufw
+    state: present
+    update_cache: true
+
+- name: "RPROXY | Suppression du vhost par défaut"
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: reload-nginx
+
+# ---- CA interne ----
+- name: "RPROXY | Copie du certificat CA interne"
+  ansible.builtin.copy:
+    content: "{{ pki_ca_cert_content }}"
+    dest: "{{ pki_ca_cert_path }}"
+    mode: "0644"
+  notify: update-ca-certificates
+
+# ---- Certificats TLS (signés CA interne) ----
+- name: "RPROXY | Création du répertoire des certificats"
+  ansible.builtin.file:
+    path: /etc/nginx/ssl
+    state: directory
+    mode: "0750"
+    owner: root
+    group: www-data
+
+- name: "RPROXY | Copie des certificats TLS"
+  ansible.builtin.copy:
+    src: "files/{{ item.src }}"
+    dest: "/etc/nginx/ssl/{{ item.dest }}"
+    mode: "{{ item.mode }}"
+    owner: root
+    group: www-data
+  loop:
+    - { src: "rproxy.itway.fr.crt", dest: "rproxy.crt", mode: "0644" }
+    - { src: "rproxy.itway.fr.key", dest: "rproxy.key", mode: "0640" }
+  notify: reload-nginx
+
+# ---- DH params pour Perfect Forward Secrecy ----
+- name: "RPROXY | Génération des paramètres DH (2048 bits)"
+  ansible.builtin.command:
+    cmd: openssl dhparam -out /etc/nginx/ssl/dhparam.pem 2048
+    creates: /etc/nginx/ssl/dhparam.pem
+
+# ---- Configuration NGINX globale ----
+- name: "RPROXY | Configuration nginx.conf principale"
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: /etc/nginx/nginx.conf
+    mode: "0644"
+    validate: "nginx -t -c %s"
+  notify: reload-nginx
+
+# ---- VHosts ----
+- name: "RPROXY | VHost itway.fr -> DMZ-WEB (WordPress)"
+  ansible.builtin.template:
+    src: vhost-itway.conf.j2
+    dest: /etc/nginx/sites-available/itway.fr.conf
+    mode: "0644"
+  notify: reload-nginx
+
+- name: "RPROXY | VHost webmail.itway.fr -> DMZ-MAIL (Roundcube)"
+  ansible.builtin.template:
+    src: vhost-webmail.conf.j2
+    dest: /etc/nginx/sites-available/webmail.itway.fr.conf
+    mode: "0644"
+  notify: reload-nginx
+
+- name: "RPROXY | VHost sso.itway.fr -> SRV-SSO (Keycloak)"
+  ansible.builtin.template:
+    src: vhost-sso.conf.j2
+    dest: /etc/nginx/sites-available/sso.itway.fr.conf
+    mode: "0644"
+  notify: reload-nginx
+
+- name: "RPROXY | Activation des vhosts"
+  ansible.builtin.file:
+    src: "/etc/nginx/sites-available/{{ item }}"
+    dest: "/etc/nginx/sites-enabled/{{ item }}"
+    state: link
+  loop:
+    - itway.fr.conf
+    - webmail.itway.fr.conf
+    - sso.itway.fr.conf
+  notify: reload-nginx
+
+- name: "RPROXY | Démarrage et activation NGINX"
+  ansible.builtin.systemd:
+    name: nginx
+    state: started
+    enabled: true
+
+# ---- Pare-feu UFW ----
+- name: "RPROXY | UFW - autoriser HTTP et HTTPS depuis Internet"
+  community.general.ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop:
+    - "80"
+    - "443"
+
+- name: "RPROXY | UFW - activation"
+  community.general.ufw:
+    state: enabled
+    policy: deny
+    direction: incoming

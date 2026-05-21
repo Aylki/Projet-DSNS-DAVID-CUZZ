@@ -1,0 +1,19 @@
+; Zone inverse 10.0.5.0/28 - DMZ-VLAN
+; Généré par Ansible - DNS-DMZ 10.0.5.5
+
+$TTL 3600
+@   IN  SOA dns.{{ domain_external }}. admin.{{ domain_external }}. (
+            2026021601
+            3600
+            1800
+            604800
+            300 )
+
+@   IN  NS  dns.{{ domain_external }}.
+
+; PTR - 10.0.5.x (dernier octet)
+1   IN  PTR rt-dmz.int.{{ domain_external }}.
+2   IN  PTR proxy-dmz.int.{{ domain_external }}.
+3   IN  PTR web-dmz.int.{{ domain_external }}.
+4   IN  PTR mail.{{ domain_external }}.
+5   IN  PTR dns.{{ domain_external }}.

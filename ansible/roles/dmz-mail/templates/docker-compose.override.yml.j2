@@ -1,0 +1,13 @@
+# docker-compose.override.yml
+# Restrictions réseau : accès admin interface (8080) uniquement depuis IT-NET
+# Généré par Ansible
+
+version: '2.1'
+
+services:
+  nginx-mailcow:
+    ports:
+      - "80:80"
+      - "443:443"
+      # Interface d'admin Mailcow : exposée uniquement sur loopback + accès IT via jump
+      - "127.0.0.1:8080:8080"

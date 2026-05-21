@@ -1,0 +1,70 @@
+# NGINX vhost WordPress - DMZ-WEB
+# dmz-web.int.itway.fr / itway.fr (via rproxy)
+# Généré par Ansible
+
+server {
+    listen 80;
+    server_name {{ domain_external }} dmz-web.int.{{ domain_external }};
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name {{ domain_external }} dmz-web.int.{{ domain_external }};
+
+    root  /var/www/wordpress;
+    index index.php index.html;
+
+    ssl_certificate     /etc/nginx/ssl/dmz-web.crt;
+    ssl_certificate_key /etc/nginx/ssl/dmz-web.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_dhparam         /etc/nginx/ssl/dhparam.pem;
+
+    access_log /var/log/nginx/wordpress.access.log;
+    error_log  /var/log/nginx/wordpress.error.log warn;
+
+    # Taille max des uploads
+    client_max_body_size 64m;
+
+    # Headers de sécurité
+    add_header X-Frame-Options        SAMEORIGIN   always;
+    add_header X-Content-Type-Options nosniff      always;
+    add_header X-XSS-Protection       "1; mode=block" always;
+
+    # WordPress
+    location / {
+        try_files $uri $uri/ /index.php?$args;
+    }
+
+    location ~ \.php$ {
+        include        fastcgi_params;
+        fastcgi_pass   unix:/run/php/php8.2-fpm.sock;
+        fastcgi_index  index.php;
+        fastcgi_param  SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        # Transmettre les headers du reverse proxy à PHP
+        fastcgi_param  HTTP_X_FORWARDED_PROTO $http_x_forwarded_proto;
+        fastcgi_param  HTTPS                  $https;
+    }
+
+    # Interdire l'accès aux fichiers sensibles
+    location ~ /\.(ht|git|svn) {
+        deny all;
+    }
+
+    location = /wp-login.php {
+        # Limiter le brute-force
+        limit_req zone=wp_login burst=5 nodelay;
+        include        fastcgi_params;
+        fastcgi_pass   unix:/run/php/php8.2-fpm.sock;
+        fastcgi_param  SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    }
+
+    # Fichiers statiques - cache long
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+        expires 30d;
+        add_header Cache-Control "public, no-transform";
+    }
+}
+
+# Rate limiting pour wp-login
+limit_req_zone $binary_remote_addr zone=wp_login:10m rate=1r/s;

@@ -1,0 +1,191 @@
+---
+# ansible/roles/dmz-web/tasks/main.yml
+# DMZ-WEB : NGINX + PHP-FPM + WordPress + intégration SSO (Keycloak OIDC)
+
+- name: "WEB | Installation des paquets"
+  ansible.builtin.apt:
+    name:
+      - nginx
+      - php8.2-fpm
+      - php8.2-mysql
+      - php8.2-curl
+      - php8.2-gd
+      - php8.2-mbstring
+      - php8.2-xml
+      - php8.2-zip
+      - php8.2-intl
+      - php8.2-bcmath
+      - mariadb-server
+      - python3-pymysql
+      - ca-certificates
+      - openssl
+      - curl
+      - ufw
+      - unzip
+    state: present
+    update_cache: true
+
+# ---- CA interne ----
+- name: "WEB | Copie du certificat CA interne"
+  ansible.builtin.copy:
+    content: "{{ pki_ca_cert_content }}"
+    dest: "{{ pki_ca_cert_path }}"
+    mode: "0644"
+  notify: update-ca-certificates
+
+# ---- TLS ----
+- name: "WEB | Répertoire des certificats"
+  ansible.builtin.file:
+    path: /etc/nginx/ssl
+    state: directory
+    mode: "0750"
+    owner: root
+    group: www-data
+
+- name: "WEB | Copie des certificats TLS"
+  ansible.builtin.copy:
+    src: "files/{{ item.src }}"
+    dest: "/etc/nginx/ssl/{{ item.dest }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { src: "dmz-web.crt", dest: "dmz-web.crt", mode: "0644" }
+    - { src: "dmz-web.key", dest: "dmz-web.key", mode: "0640" }
+  notify: reload-nginx
+
+- name: "WEB | DH params"
+  ansible.builtin.command:
+    cmd: openssl dhparam -out /etc/nginx/ssl/dhparam.pem 2048
+    creates: /etc/nginx/ssl/dhparam.pem
+
+# ---- MariaDB ----
+- name: "WEB | Démarrage MariaDB"
+  ansible.builtin.systemd:
+    name: mariadb
+    state: started
+    enabled: true
+
+- name: "WEB | Base de données WordPress"
+  community.mysql.mysql_db:
+    name: "{{ wp_db_name }}"
+    state: present
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+
+- name: "WEB | Utilisateur WordPress DB"
+  community.mysql.mysql_user:
+    name: "{{ wp_db_user }}"
+    password: "{{ wp_db_password }}"
+    priv: "{{ wp_db_name }}.*:ALL"
+    host: localhost
+    state: present
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+
+# ---- WordPress ----
+- name: "WEB | Répertoire web"
+  ansible.builtin.file:
+    path: /var/www/wordpress
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: "0755"
+
+- name: "WEB | Téléchargement WordPress (dernière version)"
+  ansible.builtin.get_url:
+    url: https://wordpress.org/latest.tar.gz
+    dest: /tmp/wordpress.tar.gz
+    mode: "0644"
+
+- name: "WEB | Extraction WordPress"
+  ansible.builtin.unarchive:
+    src: /tmp/wordpress.tar.gz
+    dest: /var/www/
+    remote_src: true
+    creates: /var/www/wordpress/wp-config.php
+    owner: www-data
+    group: www-data
+
+- name: "WEB | Génération des salt WordPress"
+  ansible.builtin.uri:
+    url: https://api.wordpress.org/secret-key/1.1/salt/
+    return_content: true
+  register: wp_salts
+  when: wp_salts is not defined
+
+- name: "WEB | Configuration wp-config.php"
+  ansible.builtin.template:
+    src: wp-config.php.j2
+    dest: /var/www/wordpress/wp-config.php
+    owner: www-data
+    group: www-data
+    mode: "0640"
+
+# ---- Plugin SSO OIDC ----
+# miniOrange OpenID Connect ou daggerhart-openid-connect-generic
+- name: "WEB | Création répertoire plugin OIDC"
+  ansible.builtin.file:
+    path: /var/www/wordpress/wp-content/plugins/openid-connect-generic
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: "0755"
+
+- name: "WEB | Téléchargement plugin OpenID Connect (daggerhart)"
+  ansible.builtin.get_url:
+    url: "https://downloads.wordpress.org/plugin/daggerhart-openid-connect-generic.latest-stable.zip"
+    dest: /tmp/oidc-plugin.zip
+    mode: "0644"
+
+- name: "WEB | Extraction plugin OIDC"
+  ansible.builtin.unarchive:
+    src: /tmp/oidc-plugin.zip
+    dest: /var/www/wordpress/wp-content/plugins/
+    remote_src: true
+    creates: /var/www/wordpress/wp-content/plugins/daggerhart-openid-connect-generic/openid-connect-generic.php
+    owner: www-data
+    group: www-data
+
+# ---- NGINX vhost WordPress ----
+- name: "WEB | Suppression vhost par défaut"
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: reload-nginx
+
+- name: "WEB | Configuration vhost WordPress"
+  ansible.builtin.template:
+    src: nginx-wordpress.conf.j2
+    dest: /etc/nginx/sites-available/wordpress.conf
+    mode: "0644"
+  notify: reload-nginx
+
+- name: "WEB | Activation vhost WordPress"
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/wordpress.conf
+    dest: /etc/nginx/sites-enabled/wordpress.conf
+    state: link
+  notify: reload-nginx
+
+- name: "WEB | Démarrage PHP-FPM et NGINX"
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop:
+    - php8.2-fpm
+    - nginx
+
+# ---- Pare-feu ----
+- name: "WEB | UFW - HTTPS depuis DMZ-RPROXY et réseaux internes"
+  community.general.ufw:
+    rule: allow
+    src: "{{ item }}"
+    port: "443"
+    proto: tcp
+  loop:
+    - "{{ dmz_rproxy_ip }}"   # PROXY-DMZ 10.0.5.2
+    - "{{ it_network }}"       # IT-VLAN 10.0.3.0/28 (administration)
+
+- name: "WEB | UFW - activation"
+  community.general.ufw:
+    state: enabled
+    policy: deny
+    direction: incoming

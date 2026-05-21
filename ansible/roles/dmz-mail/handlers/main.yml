@@ -1,0 +1,12 @@
+---
+# ansible/roles/dmz-mail/handlers/main.yml
+
+- name: update-ca-certificates
+  ansible.builtin.command: update-ca-certificates
+
+- name: restart-mailcow
+  ansible.builtin.shell: |
+    cd /opt/mailcow-dockerized
+    docker compose restart
+  args:
+    chdir: /opt/mailcow-dockerized

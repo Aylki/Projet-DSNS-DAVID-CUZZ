@@ -1,0 +1,60 @@
+// named.conf.options - DNS-DMZ (10.0.5.5)
+// Généré par Ansible depuis ANSIBLE-IT (10.0.3.2)
+// DNS autoritaire pour itway.fr - AUCUNE communication avec le DNS interne (itway.local)
+
+acl "trusted_internal" {
+    // DMZ-VLAN
+    10.0.5.0/28;
+    // SRV-VLAN (serveurs internes)
+    10.0.4.0/27;
+    // IT-VLAN (équipe informatique)
+    10.0.3.0/28;
+    // LAN-VLAN (utilisateurs)
+    192.168.15.0/24;
+    // CORE-VLAN
+    10.0.10.0/30;
+    // Localhost
+    127.0.0.1;
+    ::1;
+};
+
+options {
+    directory "/var/cache/bind";
+
+    // Écouter uniquement sur l'IP DMZ
+    listen-on     { {{ dmz_dns_ip }}; 127.0.0.1; };
+    listen-on-v6  { none; };
+
+    // Récursivité autorisée uniquement pour les réseaux internes
+    allow-recursion  { trusted_internal; };
+    allow-query-cache { trusted_internal; };
+
+    // Transferts de zone : interdits (pas de secondaire)
+    allow-transfer { none; };
+
+    // Forwarders Internet pour la résolution externe (jamais vers le DNS interne !)
+    // IMPORTANT : on NE contacte PAS le DNS interne itway.local
+    forwarders {
+        1.1.1.1;   // Cloudflare
+        8.8.8.8;   // Google
+    };
+    forward only;
+
+    // Sécurité : masquer version et identité
+    version  "hidden";
+    hostname "hidden";
+    server-id "hidden";
+
+    // DNSSEC
+    dnssec-validation auto;
+
+    // Cache
+    max-cache-size 50m;
+    max-cache-ttl  3600;
+
+    // Pas de notifications de zone
+    notify no;
+
+    // Désactiver la récursivité pour les requêtes venant d'Internet
+    // (géré par allow-recursion ci-dessus - Internet n'est pas dans trusted_internal)
+};

@@ -1,0 +1,44 @@
+; Zone itway.fr - PUBLIQUE (accessible depuis Internet)
+; Généré par Ansible - DNS-DMZ 10.0.5.5
+; Serial : YYYYMMDDNN - incrémenter à chaque modification
+
+$TTL 3600
+@   IN  SOA dns.{{ domain_external }}. admin.{{ domain_external }}. (
+            2026021601  ; serial
+            3600        ; refresh
+            1800        ; retry
+            604800      ; expire
+            300 )       ; minimum TTL
+
+; --- Serveur de noms ---
+@               IN  NS      dns.{{ domain_external }}.
+
+; --- Enregistrements A ---
+; DNS-DMZ
+dns             IN  A       {{ dmz_dns_ip }}        ; 10.0.5.5
+
+; PROXY-DMZ : point d'entrée unique Internet (IP publique NAT du RT-01 en prod)
+; En labo : IP DMZ du PROXY-DMZ
+@               IN  A       {{ dmz_rproxy_ip }}      ; 10.0.5.2
+www             IN  CNAME   {{ domain_external }}.
+
+; Webmail -> PROXY-DMZ (qui proxyfie vers MAIL-DMZ)
+webmail         IN  A       {{ dmz_rproxy_ip }}      ; 10.0.5.2
+
+; SSO -> PROXY-DMZ (endpoints OIDC publics uniquement)
+sso             IN  A       {{ dmz_rproxy_ip }}      ; 10.0.5.2
+
+; Mail (MX direct sur MAIL-DMZ)
+mail            IN  A       {{ dmz_mail_ip }}        ; 10.0.5.4
+
+; --- MX ---
+@               IN  MX  10  mail.{{ domain_external }}.
+
+; --- SPF ---
+@               IN  TXT     "v=spf1 mx a:mail.{{ domain_external }} ~all"
+
+; --- DMARC ---
+_dmarc          IN  TXT     "v=DMARC1; p=quarantine; rua=mailto:postmaster@{{ domain_external }}; adkim=s; aspf=s"
+
+; --- DKIM (à compléter après génération Mailcow) ---
+; mail._domainkey IN TXT "v=DKIM1; k=rsa; p=<CLÉ_PUBLIQUE_DKIM_MAILCOW>"

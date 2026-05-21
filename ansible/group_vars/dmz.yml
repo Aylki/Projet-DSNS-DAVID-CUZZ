@@ -1,0 +1,46 @@
+---
+# ansible/group_vars/dmz.yml
+# Variables communes à tous les serveurs de la DMZ
+# Plan d'adressage ITWay SAS - validé le 16/02/2026
+
+# --- Réseaux ---
+dmz_network:  "10.0.5.0/28"
+dmz_gateway:  "10.0.5.1"       # RT-DMZ (Stormshield)
+srv_network:  "10.0.4.0/27"
+it_network:   "10.0.3.0/28"
+lan_network:  "192.168.15.0/24"
+core_network: "10.0.10.0/30"
+
+# --- Domaines ---
+domain_external: "itway.fr"
+domain_internal: "itway.local"
+domain_int_dmz:  "int.itway.fr"
+
+# --- IPs DMZ (10.0.5.0/28) ---
+dmz_rt_ip:     "10.0.5.1"   # RT-DMZ gateway
+dmz_rproxy_ip: "10.0.5.2"   # PROXY-DMZ
+dmz_web_ip:    "10.0.5.3"   # WEB-DMZ
+dmz_mail_ip:   "10.0.5.4"   # MAIL-DMZ
+dmz_dns_ip:    "10.0.5.5"   # DNS-DMZ
+
+# --- IPs SRV-VLAN (10.0.4.0/27) ---
+srv_gateway:     "10.0.4.1"
+srv_ads01_ip:    "10.0.4.2"   # AD-SRV (Windows Server 2022)
+srv_pki_ip:      "10.0.4.3"   # PKI-SRV
+srv_sso_ip:      "10.0.4.4"   # SSO-SRV (Keycloak)
+srv_intranet_ip: "10.0.4.5"   # INTRANET-SRV
+
+# --- IPs IT-VLAN (10.0.3.0/28) ---
+it_gateway:     "10.0.3.1"
+it_ansible_ip:  "10.0.3.2"   # ANSIBLE-IT
+it_graphana_ip: "10.0.3.3"   # GRAPHANA-IT
+it_mgmt_ip:     "10.0.3.4"   # MGMT-IT
+
+# --- PKI / TLS ---
+pki_ca_cert_path: "/etc/ssl/certs/itway-ca.crt"
+pki_ca_cert_content: "{{ lookup('file', playbook_dir + '/../files/itway-ca.crt') }}"
+
+# --- NTP ---
+ntp_servers:
+  - "0.fr.pool.ntp.org"
+  - "1.fr.pool.ntp.org"
