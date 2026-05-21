@@ -1,0 +1,83 @@
+// Grafana Alloy configuration – Windows
+// Géré par Ansible, ne pas modifier manuellement
+// Machine : {{ inventory_hostname }}
+
+// ============================================================
+// MÉTRIQUES SYSTÈME – Windows Exporter intégré
+// ============================================================
+
+prometheus.exporter.windows "windows" {
+  enabled_collectors = ["cpu", "memory", "logical_disk", "net", "os", "service", "system"]
+}
+
+prometheus.scrape "windows" {
+  targets    = prometheus.exporter.windows.windows.targets
+  forward_to = [prometheus.remote_write.prometheus.receiver]
+
+  scrape_interval = "15s"
+  job_name        = "windows"
+}
+
+prometheus.remote_write "prometheus" {
+  endpoint {
+    url = "{{ prometheus_url }}/api/v1/write"
+
+    metadata_config {
+      send_interval = "1m"
+    }
+  }
+
+  external_labels = {
+    host    = "{{ inventory_hostname }}",
+    env     = "production",
+    site    = "itway",
+    os      = "windows",
+  }
+}
+
+// ============================================================
+// LOGS – Windows Event Log
+// ============================================================
+
+loki.source.windowsevent "eventlog_system" {
+  eventlog_name = "System"
+  forward_to    = [loki.write.loki.receiver]
+  labels = {
+    host     = "{{ inventory_hostname }}",
+    job      = "eventlog",
+    channel  = "System",
+  }
+}
+
+loki.source.windowsevent "eventlog_application" {
+  eventlog_name = "Application"
+  forward_to    = [loki.write.loki.receiver]
+  labels = {
+    host     = "{{ inventory_hostname }}",
+    job      = "eventlog",
+    channel  = "Application",
+  }
+}
+
+loki.source.windowsevent "eventlog_security" {
+  eventlog_name    = "Security"
+  forward_to       = [loki.write.loki.receiver]
+  labels = {
+    host     = "{{ inventory_hostname }}",
+    job      = "eventlog",
+    channel  = "Security",
+  }
+}
+
+loki.write "loki" {
+  endpoint {
+    url = "{{ loki_url }}/loki/api/v1/push"
+  }
+
+  external_labels = {
+    host = "{{ inventory_hostname }}",
+    env  = "production",
+    site = "itway",
+    os   = "windows",
+  }
+}

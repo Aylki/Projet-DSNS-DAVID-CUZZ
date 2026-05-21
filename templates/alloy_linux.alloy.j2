@@ -1,0 +1,79 @@
+// Grafana Alloy configuration – Linux
+// Géré par Ansible, ne pas modifier manuellement
+// Machine : {{ inventory_hostname }}
+
+// ============================================================
+// MÉTRIQUES SYSTÈME – Node Exporter intégré
+// ============================================================
+
+prometheus.exporter.unix "node" {
+  // Collecte CPU, RAM, disque, réseau, etc.
+}
+
+prometheus.scrape "node" {
+  targets    = prometheus.exporter.unix.node.targets
+  forward_to = [prometheus.remote_write.prometheus.receiver]
+
+  scrape_interval = "15s"
+  job_name        = "node"
+}
+
+prometheus.remote_write "prometheus" {
+  endpoint {
+    url = "{{ prometheus_url }}/api/v1/write"
+
+    metadata_config {
+      send_interval = "1m"
+    }
+  }
+
+  external_labels = {
+    host    = "{{ inventory_hostname }}",
+    env     = "production",
+    site    = "itway",
+  }
+}
+
+// ============================================================
+// LOGS SYSTÈME – journald
+// ============================================================
+
+loki.source.journal "journald" {
+  forward_to    = [loki.write.loki.receiver]
+  relabel_rules = loki.relabel.journal.rules
+  labels = {
+    host = "{{ inventory_hostname }}",
+    job  = "journald",
+  }
+}
+
+loki.relabel "journal" {
+  forward_to = []
+
+  rule {
+    source_labels = ["__journal__systemd_unit"]
+    target_label  = "unit"
+  }
+
+  rule {
+    source_labels = ["__journal__hostname"]
+    target_label  = "host"
+  }
+
+  rule {
+    source_labels = ["__journal_priority_keyword"]
+    target_label  = "level"
+  }
+}
+
+loki.write "loki" {
+  endpoint {
+    url = "{{ loki_url }}/loki/api/v1/push"
+  }
+
+  external_labels = {
+    host = "{{ inventory_hostname }}",
+    env  = "production",
+    site = "itway",
+  }
+}

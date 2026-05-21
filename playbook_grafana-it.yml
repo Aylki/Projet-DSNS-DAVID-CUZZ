@@ -1,0 +1,335 @@
+---
+- name: Configure IT-GRAPHANA server (Grafana + Prometheus + Loki)
+  hosts: all
+  become: yes
+
+  vars:
+    # --- Grafana ---
+    grafana_version: "10.2.0"
+    grafana_admin_user: "admin"
+    grafana_admin_password: "A./dmi84Pol*-*"
+    grafana_secret_key: "SW2YcwTIb9zpOOhoPsMm"   # Changer en prod
+    grafana_domain: "it-graphana.itway.local"
+    grafana_ip: "10.0.3.3"
+    grafana_db_path: "/var/lib/grafana/grafana.db"
+    grafana_log_dir: "/var/log/grafana"
+
+    # --- Prometheus ---
+    prometheus_version: "2.49.1"
+    prometheus_dir: "/etc/prometheus"
+    prometheus_data_dir: "/var/lib/prometheus"
+
+    # --- Loki ---
+    loki_version: "2.9.4"
+    loki_dir: "/etc/loki"
+    loki_data_dir: "/var/lib/loki"
+
+  tasks:
+
+    # ============================================================
+    # FIREWALL
+    # ============================================================
+
+    - name: Install UFW
+      ansible.builtin.apt:
+        name: ufw
+        state: present
+        update_cache: yes
+
+    - name: Allow SSH (avant activation UFW)
+      ansible.builtin.ufw:
+        rule: allow
+        port: "22"
+        proto: tcp
+
+    - name: Allow Grafana (3000)
+      ansible.builtin.ufw:
+        rule: allow
+        port: "3000"
+        proto: tcp
+
+    - name: Allow Prometheus (9090)
+      ansible.builtin.ufw:
+        rule: allow
+        port: "9090"
+        proto: tcp
+
+    - name: Allow Loki (3100)
+      ansible.builtin.ufw:
+        rule: allow
+        port: "3100"
+        proto: tcp
+
+    - name: Enable UFW
+      ansible.builtin.ufw:
+        state: enabled
+
+    # ============================================================
+    # GRAFANA
+    # ============================================================
+
+    - name: Add Grafana APT repository
+      ansible.builtin.apt_repository:
+        repo: "deb [trusted=yes] https://packages.grafana.com/oss/deb stable main"
+        state: present
+        filename: grafana
+        update_cache: yes
+
+    - name: Install Grafana (version pinned)
+      ansible.builtin.apt:
+        name: "grafana={{ grafana_version }}"
+        state: present
+        update_cache: yes
+
+    - name: Ensure Grafana log directory exists
+      ansible.builtin.file:
+        path: "{{ grafana_log_dir }}"
+        state: directory
+        owner: grafana
+        group: grafana
+        mode: 0755
+
+    - name: Ensure Grafana data directory exists
+      ansible.builtin.file:
+        path: /var/lib/grafana
+        state: directory
+        owner: grafana
+        group: grafana
+        mode: 0755
+
+    - name: Deploy Grafana configuration
+      ansible.builtin.template:
+        src: grafana.ini.j2
+        dest: /etc/grafana/grafana.ini
+        owner: root
+        group: grafana
+        mode: 0640
+      notify: Restart Grafana
+
+    - name: Deploy Grafana datasources provisioning
+      ansible.builtin.template:
+        src: grafana_datasources.yml.j2
+        dest: /etc/grafana/provisioning/datasources/datasources.yml
+        owner: root
+        group: grafana
+        mode: 0640
+      notify: Restart Grafana
+
+    - name: Enable and start Grafana
+      ansible.builtin.systemd:
+        name: grafana-server
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+    # ============================================================
+    # PROMETHEUS
+    # ============================================================
+
+    - name: Create prometheus user
+      ansible.builtin.user:
+        name: prometheus
+        system: yes
+        shell: /usr/sbin/nologin
+        create_home: no
+
+    - name: Create Prometheus directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: prometheus
+        group: prometheus
+        mode: 0755
+      loop:
+        - "{{ prometheus_dir }}"
+        - "{{ prometheus_data_dir }}"
+
+    - name: Download Prometheus
+      ansible.builtin.get_url:
+        url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.linux-amd64.tar.gz"
+        dest: "/tmp/prometheus.tar.gz"
+        mode: 0644
+
+    - name: Extract Prometheus
+      ansible.builtin.unarchive:
+        src: "/tmp/prometheus.tar.gz"
+        dest: "/tmp/"
+        remote_src: yes
+
+    - name: Install Prometheus binaries
+      ansible.builtin.copy:
+        src: "/tmp/prometheus-{{ prometheus_version }}.linux-amd64/{{ item }}"
+        dest: "/usr/local/bin/{{ item }}"
+        owner: root
+        group: root
+        mode: 0755
+        remote_src: yes
+      loop:
+        - prometheus
+        - promtool
+
+    - name: Deploy Prometheus configuration
+      ansible.builtin.template:
+        src: prometheus.yml.j2
+        dest: "{{ prometheus_dir }}/prometheus.yml"
+        owner: prometheus
+        group: prometheus
+        mode: 0644
+      notify: Restart Prometheus
+
+    - name: Deploy Prometheus systemd service
+      ansible.builtin.template:
+        src: prometheus.service.j2
+        dest: /etc/systemd/system/prometheus.service
+        owner: root
+        group: root
+        mode: 0644
+      notify:
+        - Reload systemd
+        - Restart Prometheus
+
+    - name: Enable and start Prometheus
+      ansible.builtin.systemd:
+        name: prometheus
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+    # ============================================================
+    # LOKI
+    # ============================================================
+
+    - name: Create loki user
+      ansible.builtin.user:
+        name: loki
+        system: yes
+        shell: /usr/sbin/nologin
+        create_home: no
+
+    - name: Create Loki directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: loki
+        group: loki
+        mode: 0755
+      loop:
+        - "{{ loki_dir }}"
+        - "{{ loki_data_dir }}"
+        - "{{ loki_data_dir }}/chunks"
+        - "{{ loki_data_dir }}/rules"
+        - "{{ loki_data_dir }}/boltdb-shipper-active"
+        - "{{ loki_data_dir }}/boltdb-shipper-cache"
+
+    - name: Download Loki
+      ansible.builtin.get_url:
+        url: "https://github.com/grafana/loki/releases/download/v{{ loki_version }}/loki-linux-amd64.zip"
+        dest: "/tmp/loki.zip"
+        mode: 0644
+
+    - name: Install unzip
+      ansible.builtin.apt:
+        name: unzip
+        state: present
+
+    - name: Extract Loki
+      ansible.builtin.unarchive:
+        src: "/tmp/loki.zip"
+        dest: "/usr/local/bin/"
+        remote_src: yes
+
+    - name: Set Loki binary permissions
+      ansible.builtin.file:
+        path: /usr/local/bin/loki-linux-amd64
+        owner: root
+        group: root
+        mode: 0755
+
+    - name: Create Loki binary symlink
+      ansible.builtin.file:
+        src: /usr/local/bin/loki-linux-amd64
+        dest: /usr/local/bin/loki
+        state: link
+
+    - name: Deploy Loki configuration
+      ansible.builtin.template:
+        src: loki.yml.j2
+        dest: "{{ loki_dir }}/loki.yml"
+        owner: loki
+        group: loki
+        mode: 0644
+      notify: Restart Loki
+
+    - name: Deploy Loki systemd service
+      ansible.builtin.template:
+        src: loki.service.j2
+        dest: /etc/systemd/system/loki.service
+        owner: root
+        group: root
+        mode: 0644
+      notify:
+        - Reload systemd
+        - Restart Loki
+
+    - name: Enable and start Loki
+      ansible.builtin.systemd:
+        name: loki
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+    # ============================================================
+    # HEALTH CHECKS
+    # ============================================================
+
+    - name: Wait for Grafana to be ready
+      ansible.builtin.uri:
+        url: "http://{{ grafana_ip }}:3000/api/health"
+        status_code: 200
+      retries: 10
+      delay: 5
+      register: result
+      until: result.status == 200
+
+    - name: Wait for Prometheus to be ready
+      ansible.builtin.uri:
+        url: "http://{{ grafana_ip }}:9090/-/healthy"
+        status_code: 200
+      retries: 10
+      delay: 5
+      register: result
+      until: result.status == 200
+
+    - name: Wait for Loki to be ready
+      ansible.builtin.uri:
+        url: "http://{{ grafana_ip }}:3100/ready"
+        status_code: 200
+      retries: 10
+      delay: 5
+      register: result
+      until: result.status == 200
+
+  # ============================================================
+  # HANDLERS
+  # ============================================================
+
+  handlers:
+
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: yes
+
+    - name: Restart Grafana
+      ansible.builtin.systemd:
+        name: grafana-server
+        state: restarted
+
+    - name: Restart Prometheus
+      ansible.builtin.systemd:
+        name: prometheus
+        state: restarted
+
+    - name: Restart Loki
+      ansible.builtin.systemd:
+        name: loki
+        state: restarted

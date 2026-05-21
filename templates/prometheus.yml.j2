@@ -1,0 +1,31 @@
+# Prometheus configuration – géré par Ansible, ne pas modifier manuellement
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+
+# Règles d'alerting (optionnel, à compléter plus tard)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files: []
+
+scrape_configs:
+
+  # Prometheus se scrape lui-même
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Node Exporter – métriques système des machines Debian
+  # Ajouter chaque machine ici après installation de l'agent Alloy
+  - job_name: "node"
+    static_configs:
+      - targets:
+          - "{{ grafana_ip }}:9100"   # Serveur Grafana lui-même
+        labels:
+          env: "production"
+          site: "itway"

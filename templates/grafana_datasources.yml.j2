@@ -1,0 +1,24 @@
+# Grafana datasources provisioning – géré par Ansible, ne pas modifier manuellement
+
+apiVersion: 1
+
+datasources:
+
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://{{ grafana_ip }}:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      timeInterval: "15s"
+
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://{{ grafana_ip }}:3100
+    isDefault: false
+    editable: false
+    jsonData:
+      maxLines: 1000

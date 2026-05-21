@@ -1,0 +1,76 @@
+---
+- name: Deploy Grafana Alloy agent (Windows)
+  hosts: windows
+  gather_facts: yes
+
+  vars:
+    alloy_version: "1.0.0"
+    alloy_installer_url: "https://github.com/grafana/alloy/releases/download/v{{ alloy_version }}/alloy-installer-windows-amd64.exe"
+    alloy_install_dir: 'C:\Program Files\GrafanaLabs\Alloy'
+    alloy_config_dir: 'C:\Program Files\GrafanaLabs\Alloy'
+    loki_url: "http://10.0.3.3:3100"
+    prometheus_url: "http://10.0.3.3:9090"
+
+  tasks:
+
+    # ============================================================
+    # INSTALLATION
+    # ============================================================
+
+    - name: Create Alloy install directory
+      ansible.windows.win_file:
+        path: "{{ alloy_install_dir }}"
+        state: directory
+
+    - name: Download Alloy installer
+      ansible.windows.win_get_url:
+        url: "{{ alloy_installer_url }}"
+        dest: 'C:\Temp\alloy-installer.exe'
+        force: no
+
+    - name: Install Alloy silently
+      ansible.windows.win_package:
+        path: 'C:\Temp\alloy-installer.exe'
+        arguments: '/S'
+        state: present
+
+    # ============================================================
+    # CONFIGURATION
+    # ============================================================
+
+    - name: Deploy Alloy configuration
+      ansible.windows.win_template:
+        src: alloy_windows.alloy.j2
+        dest: '{{ alloy_config_dir }}\config.alloy'
+      notify: Restart Alloy
+
+    # ============================================================
+    # FIREWALL WINDOWS
+    # ============================================================
+
+    - name: Allow Alloy UI port in Windows Firewall
+      community.windows.win_firewall_rule:
+        name: "Grafana Alloy"
+        localport: 12345
+        action: allow
+        direction: in
+        protocol: tcp
+        state: present
+        enabled: yes
+
+    # ============================================================
+    # SERVICE
+    # ============================================================
+
+    - name: Ensure Alloy service is running
+      ansible.windows.win_service:
+        name: "Alloy"
+        state: started
+        start_mode: auto
+
+  handlers:
+
+    - name: Restart Alloy
+      ansible.windows.win_service:
+        name: "Alloy"
+        state: restarted

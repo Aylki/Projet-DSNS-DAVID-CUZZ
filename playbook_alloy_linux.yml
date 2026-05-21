@@ -1,0 +1,103 @@
+---
+- name: Deploy Grafana Alloy agent (Linux)
+  hosts: linux
+  become: yes
+
+  vars:
+    alloy_version: "1.0.0"
+    loki_url: "http://10.0.3.3:3100"
+    prometheus_url: "http://10.0.3.3:9090"
+    alloy_config_dir: "/etc/alloy"
+    alloy_data_dir: "/var/lib/alloy"
+
+  tasks:
+
+    # ============================================================
+    # INSTALLATION
+    # ============================================================
+
+    - name: Install dependencies
+      ansible.builtin.apt:
+        name:
+          - apt-transport-https
+          - software-properties-common
+          - wget
+          - gpg
+        state: present
+        update_cache: yes
+
+    - name: Add Grafana APT keyring
+      ansible.builtin.shell: |
+        wget -q -O - https://apt.grafana.com/gpg.key | \
+        gpg --dearmor > /etc/apt/keyrings/grafana.gpg
+      args:
+        creates: /etc/apt/keyrings/grafana.gpg
+
+    - name: Add Grafana APT repository
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main"
+        state: present
+        filename: grafana
+        update_cache: yes
+
+    - name: Install Grafana Alloy
+      ansible.builtin.apt:
+        name: alloy
+        state: present
+        update_cache: yes
+
+    # ============================================================
+    # CONFIGURATION
+    # ============================================================
+
+    - name: Ensure Alloy config directory exists
+      ansible.builtin.file:
+        path: "{{ alloy_config_dir }}"
+        state: directory
+        owner: alloy
+        group: alloy
+        mode: 0755
+
+    - name: Ensure Alloy data directory exists
+      ansible.builtin.file:
+        path: "{{ alloy_data_dir }}"
+        state: directory
+        owner: alloy
+        group: alloy
+        mode: 0755
+
+    - name: Deploy Alloy configuration
+      ansible.builtin.template:
+        src: alloy_linux.alloy.j2
+        dest: "{{ alloy_config_dir }}/config.alloy"
+        owner: alloy
+        group: alloy
+        mode: 0640
+      notify: Restart Alloy
+
+    # ============================================================
+    # SERVICE
+    # ============================================================
+
+    - name: Enable and start Alloy
+      ansible.builtin.systemd:
+        name: alloy
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+    - name: Wait for Alloy to be ready
+      ansible.builtin.uri:
+        url: "http://localhost:12345/ready"
+        status_code: 200
+      retries: 10
+      delay: 5
+      register: result
+      until: result.status == 200
+
+  handlers:
+
+    - name: Restart Alloy
+      ansible.builtin.systemd:
+        name: alloy
+        state: restarted
