@@ -6,19 +6,19 @@
 # Variables secrètes pour la DMZ
 
 # ---- Mailcow ----
-mailcow_admin_password: "ChangeMoi!Admin2026"
-mailcow_db_password: "ChangeMoi!DbMail2026"
-mailcow_db_root_password: "ChangeMoi!RootDb2026"
-mail_ldap_bind_password: "ChangeMoi!LdapSvc2026"
+mailcow_admin_password: "MDP_ADMIN_MAILCOW"
+mailcow_db_password: "MDP_DB"
+mailcow_db_root_password: "MDP_DB_ROOT"
+mail_ldap_bind_password: "MDP_LDAP_BIND"
 
 # ---- WordPress ----
 wp_db_name: "wordpress"
 wp_db_user: "wp_user"
-wp_db_password: "ChangeMoi!WpDb2026"
+wp_db_password: "WP-DB-PASSWORD"
 
 # ---- WordPress OIDC (Keycloak) ----
 wp_oidc_client_id: "wordpress-dmz"
-wp_oidc_client_secret: "ChangeMoi!OidcSecret2026"
+wp_oidc_client_secret: "WP_OIDC_SECRET"
 wp_oidc_endpoint: "https://sso.itway.fr/realms/itway"
 
 # ---- Certificats TLS (contenu PEM) ----
