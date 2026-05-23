@@ -1,0 +1,199 @@
+---
+- name: Configuration IT-MGMT — Poste d'administration ITWay
+  hosts: it_mgmt
+  gather_facts: yes
+
+  vars:
+    ip_address: "10.0.3.4"
+    netmask: "255.255.255.240"
+    gateway: "10.0.3.1"
+    dns_primary: "10.0.4.2"
+    dns_secondary: "8.8.8.8"
+    admin_password: "A!dmin84/"
+
+  tasks:
+
+
+    - name: Configuration réseau statique eth0
+      copy:
+        dest: /etc/network/interfaces
+        content: |
+          auto lo
+          iface lo inet loopback
+
+          auto eth0
+          iface eth0 inet static
+                  address {{ ip_address }}
+                  netmask {{ netmask }}
+                  gateway {{ gateway }}
+                  dns-nameservers {{ dns_primary }} {{ dns_secondary }}
+
+    - name: Configuration DNS resolv.conf
+      copy:
+        dest: /etc/resolv.conf
+        content: |
+          nameserver {{ dns_primary }}
+          nameserver {{ dns_secondary }}
+
+    - name: Configuration /etc/hosts
+      copy:
+        dest: /etc/hosts
+        content: |
+          127.0.0.1       localhost
+          127.0.1.1       IT-MGMT
+          ::1             localhost ip6-localhost ip6-loopback
+          fe00::0         ip6-localnet
+          ff00::0         ip6-mcastprefix
+          ff02::1         ip6-allnodes
+          ff02::2         ip6-allrouters
+
+          # Infrastructure ITWay
+          10.0.4.2        srv-ads01.itway.local   srv-ads01
+          10.0.4.3        srv-pki.itway.local     srv-pki
+          10.0.4.4        srv-sso.itway.local     srv-sso
+          10.0.4.5        srv-intranet.itway.local srv-intranet
+          10.0.3.2        it-ansible.itway.local  it-ansible
+          10.0.3.3        it-graphana.itway.local it-graphana
+          10.0.3.4        it-mgmt.itway.local     it-mgmt
+
+
+    - name: Mise à jour des paquets
+      apt:
+        update_cache: yes
+        upgrade: safe
+
+
+    - name: Installation openssh-server
+      apt:
+        name: openssh-server
+        state: present
+
+    - name: Configuration SSH sécurisée
+      copy:
+        dest: /etc/ssh/sshd_config
+        content: |
+          Port 22
+          ListenAddress 0.0.0.0
+
+          PermitRootLogin yes
+          PasswordAuthentication yes
+          PubkeyAuthentication yes
+
+          X11Forwarding yes
+          PrintMotd no
+
+          AcceptEnv LANG LC_*
+          Subsystem sftp /usr/lib/openssh/sftp-server
+
+    - name: Démarrage et activation SSH
+      service:
+        name: ssh
+        state: restarted
+        enabled: yes
+
+
+    - name: Installation xrdp et dépendances
+      apt:
+        name:
+          - xrdp
+          - xorgxrdp
+          - x11-xserver-utils
+        state: present
+
+    - name: Ajout xrdp au groupe ssl-cert
+      user:
+        name: xrdp
+        groups: ssl-cert
+        append: yes
+
+    - name: Configuration xrdp — port et sécurité
+      lineinfile:
+        path: /etc/xrdp/xrdp.ini
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      loop:
+        - { regexp: '^port=', line: 'port=3389' }
+        - { regexp: '^security_layer=', line: 'security_layer=tls' }
+        - { regexp: '^crypt_level=', line: 'crypt_level=high' }
+
+    - name: Démarrage et activation xrdp
+      service:
+        name: xrdp
+        state: restarted
+        enabled: yes
+
+    - name: Installation des outils d'administration réseau et système
+      apt:
+        name:
+          # Outils réseau
+          - curl
+          - wget
+          - net-tools
+          - iproute2
+          - iputils-ping
+          - traceroute
+          - tcpdump
+          - nmap
+          - socat
+          - iperf3
+          - dnsutils
+          - whois
+          - mtr-tiny
+          # Outils SSH
+          - openssh-client
+          - sshpass
+          # Outils système
+          - htop
+          - vim
+          - nano
+          - git
+          - rsync
+          - tree
+          - jq
+          - unzip
+          - python3
+          - python3-pip
+          # Client RDP (pour accéder à d'autres machines)
+          - remmina
+          - remmina-plugin-rdp
+          # Client LDAP (pour vérifier l'AD)
+          - ldap-utils
+          # Navigateur (déjà présent mais on s'assure)
+          - firefox-esr
+        state: present
+
+
+    - name: Copie du certificat CA ITWay 
+      copy:
+        src: /home/ansible_admin/ansible/certs/ca.crt
+        dest: /usr/local/share/ca-certificates/itway-ca.crt
+        mode: '0644'
+      ignore_errors: yes
+
+    - name: Mise à jour du store de certificats
+      command: update-ca-certificates
+      ignore_errors: yes
+
+
+    - name: Message d'accueil MOTD
+      copy:
+        dest: /etc/motd
+        content: |
+          ╔══════════════════════════════════════════════════╗
+          ║         ITWAY — Poste d'administration IT        ║
+          ║                   IT-MGMT                        ║
+          ╠══════════════════════════════════════════════════╣
+          ║  Accès réservé à l'équipe informatique ITWay     ║
+          ║  Toute connexion est journalisée et surveillée   ║
+          ╚══════════════════════════════════════════════════╝
+
+
+    - name: Verification SSH (process)
+      command: pgrep -x sshd
+      register: ssh_status
+      ignore_errors: yes
+ 
+    - name: Verification xrdp (process)
+      command: pgrep -x xrdp
+      register: xrdp_status
+      ignore_errors: yes
