@@ -1,0 +1,269 @@
+---
+- hosts: all
+  become: yes
+
+  vars:
+    keycloak_version: "24.0.4"
+    keycloak_dir: "/opt/keycloak"
+    keycloak_db: "keycloak"
+    keycloak_db_user: "keycloak"
+    keycloak_db_pass: "A!dmin84/"
+    keycloak_admin: "admin"
+    keycloak_admin_pass: "A!dmin84/"
+    domain: "sso.itway.local"
+
+  tasks:
+
+
+    - name: Mise à jour des paquets
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    - name: Installation des paquets nécessaires
+      apt:
+        name:
+          - default-jdk
+          - postgresql
+          - postgresql-client
+          - nginx
+          - ufw
+          - curl
+          - wget
+        state: present
+
+    - name: Définir le hostname
+      hostname:
+        name: SRV-SSO
+
+    - name: Ajouter SRV-SSO dans /etc/hosts
+      lineinfile:
+        path: /etc/hosts
+        line: "10.0.4.4   sso.itway.local SRV-SSO"
+        state: present
+
+
+    - name: Politique par défaut deny
+      ufw:
+        state: enabled
+        policy: deny
+
+    - name: Autoriser SSH depuis le réseau IT
+      ufw:
+        rule: allow
+        src: "10.0.3.0/28"
+        port: "22"
+        proto: tcp
+
+    - name: Autoriser interface admin Keycloak depuis réseau IT uniquement
+      ufw:
+        rule: allow
+        src: "10.0.3.0/28"
+        port: "8080"
+        proto: tcp
+
+    - name: Autoriser HTTPS depuis tous les réseaux internes
+      ufw:
+        rule: allow
+        src: "10.0.0.0/8"
+        port: "443"
+        proto: tcp
+
+    - name: Autoriser HTTP depuis tous les réseaux internes
+      ufw:
+        rule: allow
+        src: "10.0.0.0/8"
+        port: "80"
+        proto: tcp
+
+
+    - name: Démarrer et activer PostgreSQL
+      service:
+        name: postgresql
+        state: started
+        enabled: yes
+
+    - name: Créer la base de données et l'utilisateur Keycloak
+      shell: |
+        sudo -u postgres psql -c "CREATE USER keycloak WITH PASSWORD 'A!dmin84/';" || true
+        sudo -u postgres psql -c "CREATE DATABASE keycloak OWNER keycloak;" || true
+      ignore_errors: yes
+
+
+    - name: Vérifier si Keycloak est déjà téléchargé
+      stat:
+        path: "/tmp/keycloak-{{ keycloak_version }}.tar.gz"
+      register: keycloak_archive
+
+    - name: Télécharger Keycloak
+      get_url:
+        url: "https://github.com/keycloak/keycloak/releases/download/{{ keycloak_version }}/keycloak-{{ keycloak_version }}.tar.gz"
+        dest: "/tmp/keycloak-{{ keycloak_version }}.tar.gz"
+        timeout: 300
+      when: not keycloak_archive.stat.exists
+
+    - name: Extraire Keycloak
+      unarchive:
+        src: "/tmp/keycloak-{{ keycloak_version }}.tar.gz"
+        dest: /opt/
+        remote_src: yes
+        creates: "/opt/keycloak-{{ keycloak_version }}"
+
+    - name: Créer le lien symbolique /opt/keycloak
+      file:
+        src: "/opt/keycloak-{{ keycloak_version }}"
+        dest: "{{ keycloak_dir }}"
+        state: link
+        force: yes
+
+
+    - name: Créer l'utilisateur système keycloak
+      user:
+        name: keycloak
+        system: yes
+        shell: /sbin/nologin
+        home: "{{ keycloak_dir }}"
+        create_home: no
+
+    - name: Attribuer les permissions sur le répertoire Keycloak
+      file:
+        path: "/opt/keycloak-{{ keycloak_version }}"
+        owner: keycloak
+        group: keycloak
+        recurse: yes
+
+
+    - name: Configurer keycloak.conf
+      copy:
+        dest: "{{ keycloak_dir }}/conf/keycloak.conf"
+        owner: keycloak
+        group: keycloak
+        mode: '0640'
+        content: |
+          db=postgres
+          db-username=keycloak
+          db-password=A!dmin84/
+          db-url=jdbc:postgresql://localhost/keycloak
+          http-enabled=true
+          http-port=8080
+          hostname=sso.itway.local
+          hostname-admin=http://sso.itway.local          
+          proxy=edge
+          log=console,file
+          log-file=/var/log/keycloak/keycloak.log
+
+    - name: Créer le répertoire de logs Keycloak
+      file:
+        path: /var/log/keycloak
+        state: directory
+        owner: keycloak
+        group: keycloak
+        mode: '0755'
+
+
+		- name: Builder Keycloak
+      shell: |
+        sudo -u keycloak {{ keycloak_dir }}/bin/kc.sh build
+      environment:
+        JAVA_HOME: /usr/lib/jvm/default-java
+      args:
+        creates: "{{ keycloak_dir }}/lib/quarkus/build-steps.dat"
+
+
+    - name: Créer le service systemd pour Keycloak
+      copy:
+        dest: /etc/systemd/system/keycloak.service
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Keycloak Identity and Access Management
+          After=network.target postgresql.service
+          Requires=postgresql.service
+
+          [Service]
+          User=keycloak
+          Group=keycloak
+          ExecStart={{ keycloak_dir }}/bin/kc.sh start --optimized
+          Environment=KEYCLOAK_ADMIN={{ keycloak_admin }}
+          Environment=KEYCLOAK_ADMIN_PASSWORD={{ keycloak_admin_pass }}
+          Environment=JAVA_HOME=/usr/lib/jvm/default-java
+          Restart=always
+          RestartSec=10
+          StandardOutput=append:/var/log/keycloak/keycloak.log
+          StandardError=append:/var/log/keycloak/keycloak.log
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Recharger systemd
+      systemd:
+        daemon_reload: yes
+
+    - name: Démarrer et activer Keycloak
+      service:
+        name: keycloak
+        state: started
+        enabled: yes
+
+
+    - name: Créer le répertoire SSL pour Nginx
+      file:
+        path: /etc/nginx/ssl
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+
+    - name: Configurer Nginx comme reverse proxy pour Keycloak
+      copy:
+        dest: /etc/nginx/sites-available/keycloak.conf
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          server {
+              listen 80;
+              server_name sso.itway.local sso.itway.fr;
+
+              location / {
+                  proxy_pass http://127.0.0.1:8080;
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+                  proxy_buffer_size 128k;
+                  proxy_buffers 4 256k;
+                  proxy_busy_buffers_size 256k;
+              }
+          }
+
+    - name: Activer le site Keycloak dans Nginx
+      file:
+        src: /etc/nginx/sites-available/keycloak.conf
+        dest: /etc/nginx/sites-enabled/keycloak.conf
+        state: link
+
+    - name: Désactiver le site par défaut Nginx
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+
+    - name: Démarrer et activer Nginx
+      service:
+        name: nginx
+        state: restarted
+        enabled: yes
+
+
+    - name: Copier le certificat CA ITWay
+      copy:
+        src: ./itway-ca.crt
+        dest: /usr/local/share/ca-certificates/itway-ca.crt
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Mettre à jour le store de certificats
+      command: update-ca-certificates
