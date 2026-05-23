@@ -1,0 +1,35 @@
+# Secrets et credentials — NE JAMAIS COMMITTER
+.env
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Inventaires avec mots de passe en clair
+hosts_itgmt.ini
+
+# Répertoires secrets PKI
+secrets/
+/etc/pki/private/
+
+# Ansible Vault (fichiers chiffrés OK, fichiers en clair NON)
+vault_password_file
+.vault_pass
+
+# Logs
+*.log
+logs/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Vagrant
+.vagrant/
+
+# OS
+.DS_Store
+Thumbs.db
