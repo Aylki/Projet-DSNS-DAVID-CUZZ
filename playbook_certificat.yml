@@ -1,0 +1,90 @@
+---
+- name: Récupération du certificat CA depuis SRV-PKI
+  hosts: SRV-PKI
+  become: yes
+  tasks:
+    - name: Récupérer le certificat CA
+      ansible.builtin.fetch:
+        src: "/etc/pki/certs/ca.crt"
+        dest: "/tmp/itway-ca.crt"
+        flat: yes
+
+- name: Distribution du certificat CA - Serveurs Linux
+  hosts: all_linux
+  become: yes
+  tasks:
+    - name: Déployer le certificat CA
+      ansible.builtin.copy:
+        src: "/tmp/itway-ca.crt"
+        dest: "/usr/local/share/ca-certificates/itway-ca.crt"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Mettre à jour le store de certificats
+      ansible.builtin.command: update-ca-certificates
+      changed_when: true
+
+    - name: Vérifier l'installation
+      ansible.builtin.command: >
+        openssl verify -CAfile /etc/ssl/certs/ca-certificates.crt
+        /usr/local/share/ca-certificates/itway-ca.crt
+      register: verify_result
+      changed_when: false
+
+    - name: Afficher le résultat
+      ansible.builtin.debug:
+        msg: "{{ verify_result.stdout }}"
+
+- name: Distribution du certificat CA - Serveurs Windows
+  hosts: windows
+  become: no
+  tasks:
+    - name: Copier le certificat CA
+      ansible.windows.win_copy:
+        src: "/tmp/itway-ca.crt"
+        dest: "C:\\Windows\\Temp\\itway-ca.crt"
+
+    - name: Importer dans le store Windows (Trusted Root CA)
+      ansible.windows.win_certificate_store:
+        path: "C:\\Windows\\Temp\\itway-ca.crt"
+        store_location: LocalMachine
+        store_name: Root
+        state: present
+
+    - name: Vérifier l'importation
+      ansible.windows.win_shell: |
+        Get-ChildItem -Path Cert:\LocalMachine\Root |
+        Where-Object { $_.Subject -like "*ITWay*" } |
+        Select-Object Subject, Thumbprint
+      register: cert_check
+
+    - name: Afficher le résultat
+      ansible.builtin.debug:
+        msg: "{{ cert_check.stdout }}"
+   
+- name: Distribution du certificat CA - IT-MGMT 
+  hosts: it_mgmt
+  become: no
+  gather_facts: no
+  tasks:
+    - name: Deployer le certificat CA
+      copy:
+        src: "/tmp/itway-ca.crt"
+        dest: "/usr/local/share/ca-certificates/itway-ca.crt"
+        owner: root
+        group: root
+        mode: '0644'
+    - name: Mettre a jour le store de certificats
+      command: update-ca-certificates
+      register: ca_update
+      changed_when: true
+    - name: Verifier l'installation
+      command: >
+        openssl verify -CAfile /etc/ssl/certs/ca-certificates.crt
+        /usr/local/share/ca-certificates/itway-ca.crt
+      register: verify_result
+      changed_when: false
+    - name: Afficher le resultat
+      debug:
+        msg: "{{ inventory_hostname }} : {{ verify_result.stdout }}"
