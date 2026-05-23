@@ -17,6 +17,7 @@
 ```
 srv-pki/
 ├── README.md
+├── vagrantfile
 ├── hosts.ini                  ← Inventaire Ansible
 ├── all_hosts.ini              ← Inventaire Ansible pour les certificats
 ├── playbook_srv_pki.yml       ← Déploiement de la configuration 
