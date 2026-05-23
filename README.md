@@ -18,7 +18,9 @@
 srv-pki/
 ├── README.md
 ├── hosts.ini                  ← Inventaire Ansible
-├── playbook_srv_pki.yml       ← Déploiement complet de la CA
+├── all_hosts.ini              ← Inventaire Ansible pour les certificats
+├── playbook_srv_pki.yml       ← Déploiement de la configuration 
+├── playbook_certificat.yml    ← Déploiement complet de la CA
 └── openssl.cnf                ← Configuration OpenSSL de la CA
 ```
 
