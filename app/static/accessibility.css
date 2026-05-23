@@ -1,0 +1,45 @@
+:root {
+  --color-primary:    #1a2a3a;
+  --color-secondary:  #4da6ff;
+  --color-accent:     #1e3a5f;
+  --color-bg:         #0d1b2a;
+  --color-surface:    #152232;
+  --color-border:     #2a4a6a;
+  --color-text:       #cce4ff;
+  --color-text-light: #7ab8f5;
+  --shadow:           none;
+}
+
+body   { background: #0d1b2a; color: #cce4ff; }
+
+.topbar { background: #071422; border-bottom: 2px solid #4da6ff; }
+.logo   { color: #4da6ff; }
+
+.sidebar {
+  background: #152232;
+  border-right: 2px solid #2a4a6a;
+}
+.nav-section     { color: #7ab8f5; }
+.nav-link        { color: #cce4ff; }
+.nav-link:hover  { background: #1e3a5f; }
+.nav-link.active { background: #1e3a5f; border-left-color: #4da6ff; color: #4da6ff; }
+
+.page-header         { border-bottom-color: #2a4a6a; }
+.page-header h1      { color: #4da6ff; }
+.page-subtitle       { color: #7ab8f5; }
+
+.news-card   { background: #152232; border-color: #2a4a6a; border-left-color: #4da6ff; }
+.news-title  { color: #4da6ff; }
+.news-date   { color: #7ab8f5; }
+.news-meta   { color: #7ab8f5; }
+.news-body p { color: #cce4ff; }
+
+.btn-logout { border-color: #4da6ff; }
+.btn-logout:hover { background: #1e3a5f; }
+
+.accessibility-bar { border-color: #2a4a6a; }
+.accessibility-bar button        { background: #1e3a5f; border-color: #4da6ff; color: #cce4ff; }
+.accessibility-bar button:hover  { background: #2a4a6a; }
+.accessibility-bar button.active { background: #4da6ff; color: #0d1b2a; }
+
+.empty-state { border-color: #2a4a6a; color: #7ab8f5; background: #152232; }
