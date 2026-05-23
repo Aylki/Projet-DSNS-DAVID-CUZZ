@@ -1,0 +1,2 @@
+[it_mgmt]
+IT-MGMT ansible_host=10.0.3.4 ansible_user=xxxx ansible_password=xxxx ansible_python_interpreter=/usr/bin/python3 ansible_ssh_common_args='-o StrictHostKeyChecking=no'
