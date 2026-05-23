@@ -138,5 +138,4 @@ sudo sqlite3 /opt/intranet/app/intranet.db "DELETE FROM news WHERE id = **;"
 ## Points à traiter
 
 - [ ] Mettre à jour la redirect URI Keycloak en `https://intranet.itway.local/*`
-- [ ] Corriger l'URL de logout dans `app.py` (actuellement en `http://`)
 - [ ] Ajouter une interface web d'administration des actualités
