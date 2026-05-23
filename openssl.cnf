@@ -1,0 +1,78 @@
+[ ca ]
+default_ca = CA_default
+
+[ CA_default ]
+dir             = /etc/pki
+certs           = $dir/certs
+crl_dir         = $dir/crl
+database        = $dir/index.txt
+new_certs_dir   = $dir/newcerts
+certificate     = $dir/certs/ca.crt
+serial          = $dir/serial
+crlnumber       = $dir/crlnumber
+private_key     = $dir/private/ca.key
+RANDFILE        = $dir/private/.rand
+crl             = $dir/crl/ca.crl
+default_md      = sha256
+default_days    = 365
+default_crl_days= 30
+policy          = policy_match
+name_opt        = ca_default
+cert_opt        = ca_default
+
+[ policy_match ]
+countryName             = match
+stateOrProvinceName     = match
+organizationName        = match
+organizationalUnitName  = optional
+commonName              = supplied
+emailAddress            = optional
+
+[ policy_anything ]
+countryName             = optional
+stateOrProvinceName     = optional
+localityName            = optional
+organizationName        = optional
+organizationalUnitName  = optional
+commonName              = supplied
+emailAddress            = optional
+
+[ req ]
+default_bits        = 2048
+default_keyfile     = /etc/pki/private/ca.key
+distinguished_name  = req_distinguished_name
+x509_extensions     = v3_ca
+string_mask         = utf8only
+default_md          = sha256
+
+[ req_distinguished_name ]
+countryName                    = Country Name (2 letter code)
+stateOrProvinceName            = State or Province Name
+localityName                   = Locality Name
+organizationName               = Organization Name
+organizationalUnitName         = Organizational Unit Name
+commonName                     = Common Name
+emailAddress                   = Email Address
+countryName_default            = FR
+stateOrProvinceName_default    = PACA
+localityName_default           = Avignon
+organizationName_default       = ITWay
+organizationalUnitName_default = IT
+commonName_default             = ITWay
+emailAddress_default           = contact@itway.local
+
+[ v3_ca ]
+subjectKeyIdentifier   = hash
+authorityKeyIdentifier = keyid:always,issuer
+basicConstraints       = critical, CA:true
+keyUsage               = critical, digitalSignature, cRLSign, keyCertSign
+
+[ server_cert ]
+basicConstraints       = CA:FALSE
+subjectKeyIdentifier   = hash
+authorityKeyIdentifier = keyid,issuer
+keyUsage               = critical, digitalSignature, keyEncipherment
+extendedKeyUsage       = serverAuth
+
+[ crl_ext ]
+authorityKeyIdentifier = keyid:always
