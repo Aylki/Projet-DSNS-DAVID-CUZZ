@@ -18,8 +18,8 @@
 ```
 srv-ads01/
 ├── README.md
-├── hosts.ini        ← Inventaire Ansible (WinRM)
-└── playbook.yml     ← Playbook de configuration AD
+├── hosts.ini                  ← Inventaire Ansible (WinRM)
+└── playbook_srv_ads01.yml     ← Playbook de configuration AD
 ```
 
 ---
