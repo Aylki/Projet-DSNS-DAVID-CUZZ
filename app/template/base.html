@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ITWay Intranet</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/accessibility.css" id="accessibility-stylesheet" disabled>
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="topbar-left">
+      <span class="logo">&#9632; ITWay</span>
+      <span class="app-title">Intranet</span>
+    </div>
+    <div class="topbar-right">
+      {% if user %}
+      <span class="user-info">
+        <span class="user-icon">&#9679;</span>
+        {{ user.name }}
+      </span>
+
+      <div class="accessibility-bar">
+        <span class="access-label">Accessibilite :</span>
+        <button onclick="resetFont()"   title="Taille normale" aria-label="Taille de police normale">A</button>
+        <button onclick="doubleFont()"  title="Doubler la taille" aria-label="Doubler la taille de police">A&#215;2</button>
+        <button onclick="toggleContrast()" id="contrast-btn" title="Mode contraste malvoyance" aria-label="Activer le mode malvoyance">&#9681; Malvoyance</button>
+      </div>
+
+      <a href="/auth/logout" class="btn-logout">Deconnexion</a>
+      {% endif %}
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="sidebar">
+      <ul>
+        <li class="nav-section">Navigation</li>
+        <li><a href="/" class="nav-link {% if request.path == '/' %}active{% endif %}">
+          &#9632; Actualites
+        </a></li>
+      </ul>
+    </nav>
+
+    <main class="content">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  <script>
+    const FONT_KEY     = 'itway_font_size';
+    const CONTRAST_KEY = 'itway_contrast';
+    const BASE_SIZE    = 16;
+
+    function applyFont(size) {
+      document.documentElement.style.fontSize = size + 'px';
+      localStorage.setItem(FONT_KEY, size);
+    }
+
+    function resetFont()  { applyFont(BASE_SIZE); }
+    function doubleFont() { applyFont(BASE_SIZE + 2); }
+
+    function toggleContrast() {
+      const sheet  = document.getElementById('accessibility-stylesheet');
+      const active = !sheet.disabled;
+      sheet.disabled = active;
+      localStorage.setItem(CONTRAST_KEY, active ? '0' : '1');
+      document.getElementById('contrast-btn').classList.toggle('active', !active);
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const saved = parseInt(localStorage.getItem(FONT_KEY) || BASE_SIZE);
+      applyFont(saved);
+      if (localStorage.getItem(CONTRAST_KEY) === '1') {
+        document.getElementById('accessibility-stylesheet').disabled = false;
+        document.getElementById('contrast-btn').classList.add('active');
+      }
+    });
+  </script>
+
+</body>
+</html>
