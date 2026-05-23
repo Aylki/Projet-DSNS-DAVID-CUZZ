@@ -1,0 +1,158 @@
+---
+- name: Deploiement SRV-INTRANET
+  hosts: srv_intranet
+  become: true
+
+  tasks:
+
+  - name: Installer les paquets
+    apt:
+      name:
+        - python3
+        - python3-pip
+        - python3-venv
+        - nginx
+        - ufw
+        - curl
+        - sqlite3
+      state: present
+      update_cache: true
+
+  - name: Configurer le DNS vers SRV-ADS01
+    copy:
+      dest: /etc/resolv.conf
+      content: |
+        nameserver 10.0.4.2
+        nameserver 8.8.8.8
+
+  - name: Creer utilisateur intranet
+    user:
+      name: intranet
+      shell: /usr/sbin/nologin
+      create_home: true
+
+  - name: Creer les repertoires
+    file:
+      path: "{{ item }}"
+      state: directory
+      owner: intranet
+      group: intranet
+      mode: "0750"
+    loop:
+      - /opt/intranet
+      - /opt/intranet/app
+      - /opt/intranet/app/templates
+      - /opt/intranet/app/static
+      - /var/log/intranet
+
+  - name: Creer le virtualenv
+    command: python3 -m venv /opt/intranet/venv
+    args:
+      creates: /opt/intranet/venv
+
+  - name: Installer les dependances Python
+    pip:
+      name:
+        - flask
+        - gunicorn
+        - requests
+        - authlib
+        - flask-login
+      virtualenv: /opt/intranet/venv
+
+  - name: Fixer permissions virtualenv
+    file:
+      path: /opt/intranet/venv
+      owner: intranet
+      group: intranet
+      recurse: true
+
+  - name: Deployer le service systemd
+    copy:
+      dest: /etc/systemd/system/intranet.service
+      content: |
+        [Unit]
+        Description=ITWay Intranet (Gunicorn/Flask)
+        After=network.target
+
+        [Service]
+        User=intranet
+        Group=intranet
+        WorkingDirectory=/opt/intranet/app
+        EnvironmentFile=/opt/intranet/app/.env
+        Environment="PATH=/opt/intranet/venv/bin"
+        ExecStart=/opt/intranet/venv/bin/gunicorn \
+            --workers 3 \
+            --bind 127.0.0.1:5000 \
+            --access-logfile /var/log/intranet/access.log \
+            --error-logfile /var/log/intranet/error.log \
+            app:app
+        Restart=always
+        RestartSec=5
+
+        [Install]
+        WantedBy=multi-user.target
+
+  - name: Activer et demarrer intranet
+    systemd:
+      name: intranet
+      enabled: true
+      state: restarted
+      daemon_reload: true
+
+  - name: Supprimer vhost par defaut
+    file:
+      path: /etc/nginx/sites-enabled/default
+      state: absent
+
+  - name: Deployer vhost Nginx
+    copy:
+      dest: /etc/nginx/sites-available/intranet
+      content: |
+        server {
+            listen 80;
+            server_name intranet.itway.local;
+
+            location /static/ {
+                alias /opt/intranet/app/static/;
+                expires 7d;
+            }
+
+            location / {
+                proxy_pass       http://127.0.0.1:5000;
+                proxy_set_header Host            $host;
+                proxy_set_header X-Real-IP       $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            }
+        }
+
+  - name: Activer vhost intranet
+    file:
+      src: /etc/nginx/sites-available/intranet
+      dest: /etc/nginx/sites-enabled/intranet
+      state: link
+
+  - name: Verifier config Nginx
+    command: nginx -t
+
+  - name: Redemarrer Nginx
+    systemd:
+      name: nginx
+      enabled: true
+      state: restarted
+
+  - name: Configurer UFW
+    ufw:
+      rule: allow
+      from_ip: "{{ item.from }}"
+      port: "{{ item.port }}"
+      proto: tcp
+    loop:
+      - { from: "10.0.3.0/28", port: "22"  }
+      - { from: "10.0.0.0/8",  port: "80"  }
+      - { from: "10.0.0.0/8",  port: "443" }
+
+  - name: Activer UFW
+    ufw:
+      state: enabled
+      policy: deny
