@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-header">
+  <h1>Actualites</h1>
+  <span class="page-subtitle">Informations internes de l'entreprise ITWay</span>
+</div>
+
+{% if news %}
+  {% for item in news %}
+  <article class="news-card">
+    <div class="news-header">
+      <h2 class="news-title">{{ item["title"] }}</h2>
+      <span class="news-date">{{ item["created"] }}</span>
+    </div>
+    <div class="news-meta">
+      <span class="news-author">&#9679; {{ item["author"] }}</span>
+    </div>
+    <div class="news-body">
+      <p>{{ item["content"] }}</p>
+    </div>
+  </article>
+  {% endfor %}
+{% else %}
+  <div class="empty-state">
+    <p>Aucune actualite pour le moment.</p>
+  </div>
+{% endif %}
+
+{% endblock %}
