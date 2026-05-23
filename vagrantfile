@@ -1,0 +1,88 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+  config.vm.box = "debian/bookworm64"
+  config.vm.hostname = "SRV-SSO"
+  config.vm.boot_timeout = 1200
+  config.vm.provider "virtualbox" do |vb|
+    vb.memory = "4096"
+    vb.cpus = 2
+    vb.name = "SRV-SSO"
+    vb.customize ["modifyvm", :id,
+      "--uart1", "0x3F8", "4",
+      "--uartmode1", "disconnected"
+    ]
+  end
+  config.vm.provision "shell", inline: <<-SHELL
+    #!/bin/bash
+    set -e
+
+    # DNS temporaire
+    echo 'nameserver 8.8.8.8' > /etc/resolv.conf
+    echo 'nameserver 8.8.4.4' >> /etc/resolv.conf
+
+
+    sed -i 's|^GRUB_CMDLINE_LINUX=.*|GRUB_CMDLINE_LINUX="console=tty0 console=ttyS0,115200 earlyprintk=ttyS0,115200"|' /etc/default/grub
+    if grep -q '^#\\?GRUB_TERMINAL=' /etc/default/grub; then
+      sed -i 's|^#\\?GRUB_TERMINAL=.*|GRUB_TERMINAL="console serial"|' /etc/default/grub
+    else
+      echo 'GRUB_TERMINAL="console serial"' >> /etc/default/grub
+    fi
+    update-grub
+
+
+    apt-get update
+    apt-get install -y openssh-server sudo python3 python3-apt curl wget
+
+    apt-get install -y default-jdk
+
+    apt-get install -y postgresql postgresql-client
+
+    apt-get install -y nginx
+
+    if ! id -u ansible >/dev/null 2>&1; then
+      useradd -m -s /bin/bash ansible
+      echo "ansible:ansible" | chpasswd
+    fi
+    usermod -aG sudo ansible
+    echo 'ansible ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/ansible
+    chmod 440 /etc/sudoers.d/ansible
+
+    mkdir -p /home/ansible/.ssh
+    echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBhuPxfoR/HA7wfp3pXCN6Bxh+WYz/3W2CJVDkRIw463 ansible_admin@debian' > /home/ansible/.ssh/authorized_keys
+    chown -R ansible:ansible /home/ansible/.ssh
+    chmod 700 /home/ansible/.ssh
+    chmod 600 /home/ansible/.ssh/authorized_keys
+
+    if ! id -u admin >/dev/null 2>&1; then
+      useradd -m -s /bin/bash admin
+      echo "admin:A!dmin84/" | chpasswd
+    fi
+    usermod -aG sudo admin
+    echo 'admin ALL=(ALL) ALL' > /etc/sudoers.d/admin
+    chmod 440 /etc/sudoers.d/admin
+
+
+    systemctl enable ssh
+    systemctl restart ssh
+
+    systemctl enable serial-getty@ttyS0.service
+    systemctl start serial-getty@ttyS0.service
+
+
+    cat > /etc/network/interfaces <<EOF
+auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet static
+    address 10.0.4.4
+    netmask 255.255.255.224
+    gateway 10.0.4.1
+    dns-nameservers 10.0.4.2 8.8.8.8
+EOF
+
+    systemctl restart networking || /etc/init.d/networking restart || true
+  SHELL
+end
