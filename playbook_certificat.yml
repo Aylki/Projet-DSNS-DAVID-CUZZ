@@ -36,6 +36,22 @@
       ansible.builtin.debug:
         msg: "{{ verify_result.stdout }}"
 
+    - name: Créer le répertoire /etc/ldap si absent
+      ansible.builtin.file:
+        path: /etc/ldap
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Configurer TLS_CACERT pour ldapsearch
+      ansible.builtin.copy:
+        dest: /etc/ldap/ldap.conf
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+
 - name: Distribution du certificat CA - Serveurs Windows
   hosts: windows
   become: no
@@ -88,3 +104,19 @@
     - name: Afficher le resultat
       debug:
         msg: "{{ inventory_hostname }} : {{ verify_result.stdout }}"
+
+    - name: Créer le répertoire /etc/ldap si absent
+      file:
+        path: /etc/ldap
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Configurer TLS_CACERT pour ldapsearch
+      copy:
+        dest: /etc/ldap/ldap.conf
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
