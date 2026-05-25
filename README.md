@@ -129,8 +129,4 @@ sudo -u postgres pg_dump keycloak > backup_keycloak_$(date +%Y%m%d).sql
 
 ## Points à traiter
 
-- [ ] Passer la fédération AD en **LDAPS (port 636)**
 - [ ] Déployer le **pont Kerberos / SPNEGO** (auth transparente intranet + WordPress)
-- [ ] Activer `hostname-strict-https=true` dans `keycloak.conf`
-- [ ] Mettre à jour le realm : SSL requis → "External requests"
-- [ ] Mettre à jour les redirect URIs des clients OIDC en `https://`
