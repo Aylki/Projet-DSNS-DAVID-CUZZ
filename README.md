@@ -91,7 +91,6 @@ ansible-playbook -i hosts.ini playbook_srv_sso.yml
 | `intranet-client` | `https://intranet.itway.local/*` | SRV-INTRANET |
 | `wordpress-client` | `https://sso.itway.fr/*` | DMZ-WEB |
 
-> ⚠️ Les client secrets ne sont pas versionnés. Les stocker dans `.env` ou Ansible Vault.
 
 ---
 
