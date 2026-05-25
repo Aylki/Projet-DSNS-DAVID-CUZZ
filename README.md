@@ -130,5 +130,4 @@ scp /etc/pki/private/<nom>.key ansible@<ip>:/etc/nginx/ssl/
 ## Points à traiter
 
 - [ ] Passer les secrets CA dans **Ansible Vault** (passphrase actuellement en clair dans le playbook)
-- [ ] Émettre les certificats pour les services restants (LDAPS, DMZ-MAIL, DMZ-WEB)
 - [ ] Déployer un répondeur **OCSP** si requis (port 2560)
