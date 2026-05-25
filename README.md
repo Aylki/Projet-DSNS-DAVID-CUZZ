@@ -95,6 +95,5 @@ ansible-playbook -i hosts.ini playbook_srv_ads01.yml
 
 ## Points à traiter
 
-- [ ] Passer la fédération Keycloak en **LDAPS (port 636)** — nécessite certificat signé par SRV-PKI
 - [ ] Implémenter **IPSec Kerberos** entre machines internes (requis CDC)
 - [ ] Déployer le **pont Kerberos / SPNEGO** pour auth transparente intranet
